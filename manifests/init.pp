@@ -82,6 +82,14 @@
 #  [*help_url*]
 #    (optional) Location where the documentation should point.
 #    Defaults to 'http://docs.openstack.org'.
+#
+#  [*wsgi_processes*]
+#    (optional) Number of Horizon processes to spawn
+#    Defaults to '3'
+#
+#  [*wsgi_threads*]
+#    (optional) Number of thread to run in a Horizon process
+#    Defaults to '10'
 
 class horizon(
   $secret_key,
@@ -108,10 +116,15 @@ class horizon(
   $horizon_key             = undef,
   $horizon_ca              = undef,
   $help_url                = 'http://docs.openstack.org',
-  $local_settings_template = 'horizon/local_settings.py.erb'
-) {
+  $local_settings_template = 'horizon/local_settings.py.erb',
+  $local_httpd_template    = 'horizon/openstack-dashboard.conf.erb',
+  $wsgi_processes          = '3',
+  $wsgi_threads            = '10',
+  $wsgi_user               = $horizon::params::wsgi_user,
+  $wsgi_group              = $horizon::params::wsgi_group,
+  $root_url                = $horizon::params::root_url,
+) inherits horizon::params {
 
-  include horizon::params
   include apache
   include apache::mod::wsgi
 
@@ -126,7 +139,12 @@ class horizon(
     }
   }
 
-  file { $::horizon::params::httpd_config_file: }
+  file { $::horizon::params::httpd_config_file:
+    content => template($local_httpd_template),
+    mode    => '0644',
+    notify  => Service[$::horizon::params::http_service],
+    require => Package['horizon'],
+  }
 
   Service <| title == 'memcached' |> -> Class['horizon']
 
@@ -146,17 +164,10 @@ class horizon(
   file { $::horizon::params::logdir:
     ensure  => directory,
     mode    => '0751',
-    owner   => $::horizon::params::apache_user,
-    group   => $::horizon::params::apache_group,
+    owner   => $wsgi_user,
+    group   => $wsgi_group,
     before  => Service[$::horizon::params::http_service],
     require => Package['horizon']
-  }
-
-  file_line { 'horizon_redirect_rule':
-    path    => $::horizon::params::httpd_config_file,
-    line    => "RedirectMatch permanent ^/$ ${::horizon::params::root_url}/",
-    require => Package['horizon'],
-    notify  => Service[$::horizon::params::http_service]
   }
 
   file_line { 'httpd_listen_on_bind_address_80':
@@ -215,14 +226,5 @@ class horizon(
       notify  => Service[$::horizon::params::http_service],
       require => Class['apache::mod::ssl'],
     }
-  }
-
-  $django_wsgi = '/usr/share/openstack-dashboard/openstack_dashboard/wsgi/django.wsgi'
-
-  file_line { 'horizon root':
-    path    => $::horizon::params::httpd_config_file,
-    line    => "WSGIScriptAlias ${::horizon::params::root_url} ${django_wsgi}",
-    match   => 'WSGIScriptAlias ',
-    require => Package['horizon'],
   }
 }
