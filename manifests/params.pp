@@ -2,7 +2,8 @@
 # should be considered to be constant
 class horizon::params {
 
-  $logdir = '/var/log/horizon'
+  $logdir    = '/var/log/horizon'
+  $manage_py = '/usr/share/openstack-dashboard/manage.py'
 
   case $::osfamily {
     'RedHat': {
