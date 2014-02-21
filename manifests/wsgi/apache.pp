@@ -19,37 +19,50 @@
 #  [*horizon_ca*]
 #    (required with listen_ssl) CA certificate to use for SSL support.
 #
+#
+#  [*wsgi_processes*]
+#    (optional) Number of Horizon processes to spawn
+#    Defaults to '3'
+#
+#  [*wsgi_threads*]
+#    (optional) Number of thread to run in a Horizon process
+#    Defaults to '10'
+
 class horizon::wsgi::apache (
-  $bind_address = '0.0.0.0',
-  $listen_ssl   = false,
-  $horizon_cert = undef,
-  $horizon_key  = undef,
-  $horizon_ca   = undef,
+  $bind_address            = '0.0.0.0',
+  $listen_ssl              = false,
+  $horizon_cert            = undef,
+  $horizon_key             = undef,
+  $horizon_ca              = undef,
+  $local_httpd_template    = 'horizon/apache_openstack-dashboard.conf.erb',
+  $wsgi_processes          = '3',
+  $wsgi_threads            = '10',
+  $wsgi_user               = $horizon::params::wsgi_user,
+  $wsgi_group              = $horizon::params::wsgi_group,
+  $root_url                = $horizon::params::root_url,
 ) {
 
   include ::horizon::params
   include ::apache
   include ::apache::mod::wsgi
 
-  file { $::horizon::params::httpd_config_file: }
+  file { $::horizon::params::httpd_config_file:
+    content => template($local_httpd_template),
+    mode    => '0644',
+    notify  => Service[$::horizon::params::http_service],
+    require => Package['horizon'],
+  }
 
   Package['horizon'] -> Package[$::horizon::params::http_service]
   File[$::horizon::params::config_file] ~> Service[$::horizon::params::http_service]
 
   file { $::horizon::params::logdir:
     ensure  => directory,
-    owner   => $::horizon::params::apache_user,
-    group   => $::horizon::params::apache_group,
+    owner   => $wsgi_user,
+    group   => $wsgi_group,
     before  => Service[$::horizon::params::http_service],
     mode    => '0751',
     require => Package['horizon']
-  }
-
-  file_line { 'horizon_redirect_rule':
-    path    => $::horizon::params::httpd_config_file,
-    line    => "RedirectMatch permanent ^/$ ${::horizon::params::root_url}/",
-    require => Package['horizon'],
-    notify  => Service[$::horizon::params::http_service]
   }
 
   file_line { 'httpd_listen_on_bind_address_80':

@@ -2,8 +2,10 @@ require 'spec_helper'
 
 describe 'horizon::wsgi::apache' do
 
-  let :params do
-    {}
+  let :params do {
+      :wsgi_processes => 3,
+      :wsgi_threads   => 10,
+    }
   end
 
   let :pre_condition do
@@ -22,14 +24,23 @@ describe 'horizon::wsgi::apache' do
   shared_examples 'apache for horizon' do
 
     context 'with default parameters' do
+
+      it 'generates the openstack-dashboard.conf' do
+
+        verify_contents(subject, platforms_params[:httpd_config_file], [
+          "WSGIScriptAlias #{platforms_params[:root_url]} /usr/share/openstack-dashboard/openstack_dashboard/wsgi/django.wsgi",
+          "WSGIDaemonProcess horizon user=#{platforms_params[:wsgi_user]} group=#{platforms_params[:wsgi_group]} processes=#{params[:wsgi_processes]} threads=#{params[:wsgi_threads]}",
+          "WSGIProcessGroup #{platforms_params[:wsgi_group]}",
+          "RedirectMatch permanent ^/$ #{platforms_params[:root_url]}/",
+        ])
+      end
+
       it 'configures apache' do
         should contain_class('horizon::params')
         should contain_class('apache')
         should contain_class('apache::mod::wsgi')
         should contain_service('httpd').with_name(platforms_params[:http_service])
         should contain_file(platforms_params[:httpd_config_file])
-        should contain_file_line('horizon_redirect_rule').with(
-          :line => "RedirectMatch permanent ^/$ #{platforms_params[:root_url]}/")
       end
     end
 
@@ -86,7 +97,10 @@ describe 'horizon::wsgi::apache' do
     let :platforms_params do
       { :http_service      => 'httpd',
         :httpd_config_file => '/etc/httpd/conf.d/openstack-dashboard.conf',
-        :root_url          => '/dashboard' }
+        :root_url          => '/dashboard',
+        :wsgi_user         => 'dashboard',
+        :wsgi_group        => 'dashboard',
+      }
     end
 
     it_behaves_like 'apache for horizon'
@@ -103,7 +117,10 @@ describe 'horizon::wsgi::apache' do
     let :platforms_params do
       { :http_service      => 'apache2',
         :httpd_config_file => '/etc/apache2/conf.d/openstack-dashboard.conf',
-        :root_url          => '/horizon' }
+        :root_url          => '/horizon',
+        :wsgi_user         => 'horizon',
+        :wsgi_group        => 'horizon',
+      }
     end
 
     it_behaves_like 'apache for horizon'
